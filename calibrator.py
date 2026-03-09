@@ -33,6 +33,21 @@ def load_images_from_folder(folder):
             images.append(img)
     return images
 
+def load_images_from_video(path):
+    cap = cv2.VideoCapture(path)
+    if not cap.isOpened():
+        print("Error opening video file.")
+        exit()
+
+    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    images = []
+    for frame_number in range(total_frames):
+        cap.set(cv2.CAP_PROP_POS_FRAMES, frame_number)
+        ret, frame = cap.read()
+        if ret:
+            images.append(frame)
+    return images
+
 
 # calibration data
 all_corners = []
@@ -42,10 +57,12 @@ all_image_points = []
 
 image_size = None
 
-images = load_images_from_folder("imgs")
+# images = load_images_from_folder("imgs/2")
+images = load_images_from_video("imgs/3/calibration.mp4")
+
 for frame in images:
     # frame = cv2.rotate(frame, cv2.ROTATE_90_CLOCKWISE)
-    frame = cv2.resize(frame, (1920, 1080))
+    frame = cv2.resize(frame, (1280, 720))
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
     detector = CharucoDetector(board)
     charuco_corners, charuco_ids, _, _ = detector.detectBoard(gray)
@@ -73,7 +90,7 @@ for frame in images:
     else:
         print("detection failed, skipped")
     
-    if key == ord('q'):
+    if key == ord('q') or len(all_corners)>100:
         break
     time.sleep(0.001)
     
