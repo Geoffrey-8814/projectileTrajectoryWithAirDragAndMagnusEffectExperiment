@@ -7,7 +7,7 @@ st.set_page_config(
 
 pg = st.navigation([
     st.Page("pages/tutorial.py", title="User Guide", icon="📖"),
-    st.Page("pages/configuration.py", title="Project Configuration", icon="🛠"),
+    st.Page("pages/Configuration.py", title="Project Configuration", icon="🛠"),
     st.Page("pages/calibration.py", title="Camera Calibration", icon="📷"),
     st.Page("pages/annotation.py", title="Video Annotation", icon="🎯"),
     st.Page("pages/trajectory.py", title="Trajectory Analysis", icon="🚀"),

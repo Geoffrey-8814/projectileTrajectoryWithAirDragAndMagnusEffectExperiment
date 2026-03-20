@@ -59,6 +59,7 @@ with st.expander("➕ Add New Project Profile", expanded=True):
                 st.error("Please provide a Unique ID.")
 
 # --- 3. MANAGE & VIEW PROJECTS ---
+
 st.divider()
 st.subheader("Current Projects")
 
