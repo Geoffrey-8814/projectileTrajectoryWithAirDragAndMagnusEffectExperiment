@@ -1,0 +1,30 @@
+PROJECTILE ANALYSIS & ROBOT DISTILLATION TUTORIAL
+
+1. CAMERA SETUP & VIDEO CAPTURE (CRITICAL)
+For the physics model to be accurate, your video must be "scientific grade."
+- Perpendicularity: The camera lens MUST be perfectly perpendicular to the plane of the projectile's flight. If the ball moves toward or away from the camera, the distance calculations will be wrong.
+- Tripod: Use a tripod. Any camera shake will ruin the tracking.
+- Fixed Settings: Turn OFF "Auto-Focus" and "Auto-Exposure." Lock them before recording.
+- High Framerate: If possible, record in 60fps or 120fps to get more data points for the optimizer.
+- Wall Distance: Measure the exact distance from the camera lens to the plane where the ball is flying.
+
+2. CAMERA CALIBRATION
+Calibration removes "Lens Distortion" (the fisheye effect).
+- Generation: Generate and print the ChArUco board. Measure the squares with a caliper to ensure the "Square Side" in the app matches the physical paper.
+- The Video: Move the board around the entire frame. Ensure the board "fills" the corners and edges of the camera view, as this is where distortion is highest.
+- Consistency: Use the EXACT same resolution, zoom level, and lens for the calibration video and the projectile video. If you change the zoom, you must re-calibrate.
+
+3. ANNOTATION (THE LOGGER)
+- Wall Distance: Enter the distance from the camera to the flight path.
+- Click Precision: Click the center of the ball in every frame. 
+- Logger Pro Style: Use the 'Auto-advance' feature to speed up the process. The app will automatically move to the next frame after each click.
+
+4. TRAJECTORY OPTIMIZATION
+- This page fits your clicks to the physics engine (Air Drag + Magnus Effect).
+- Use 'Optimize Aero' if you aren't sure of your ball's Drag Coefficient (Cd) or Lift Coefficient (Cl). 
+- A good fit will have a low "Residual Cost" and the blue line should overlap your red dots perfectly.
+
+5. ROBOT DISTILLATION
+- The "Distiller" runs thousands of simulations to find the perfect launch velocity for every distance.
+- It "Distills" this into a simple math formula (Polynomial) that a Robot (like a RoboRIO) can calculate in under 1 millisecond.
+- Download the JSON and load it into your robot code to achieve "First Shot" accuracy.

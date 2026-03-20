@@ -1,0 +1,9 @@
+matplotlib==3.10.8
+numpy==2.4.3
+opencv_python==4.11.0.86
+pandas==3.0.1
+Pillow==12.1.1
+scikit_learn==1.8.0
+scipy==1.17.1
+streamlit==1.55.0
+streamlit_image_coordinates==0.4.0

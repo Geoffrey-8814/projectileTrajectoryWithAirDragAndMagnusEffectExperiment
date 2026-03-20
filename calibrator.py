@@ -112,8 +112,15 @@ else:
     
     np.savez("calibration.npz", 
              camera_matrix=camera_matrix, 
-             dist_coeffs=dist_coeffs)
+             dist_coeffs=dist_coeffs,
+             resolution=image_size)
     
     print("\nresult saved as calibration.npz")
     print("camera matrix:\n", camera_matrix)
     print("distortion coeffs:\n", dist_coeffs.ravel())
+    print("image size:\n", image_size)
+    x, y = image_size
+    print(x)
+    
+    
+    
