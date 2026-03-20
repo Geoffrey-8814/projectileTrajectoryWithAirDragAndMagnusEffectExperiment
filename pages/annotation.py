@@ -6,7 +6,6 @@ import streamlit as st
 from streamlit_image_coordinates import streamlit_image_coordinates
 from PIL import Image
 
-# st.set_page_config(layout="wide", page_title="Projectile Logger")
 
 # ── 1. SESSION STATE INITIALIZATION ────────────────────────────────
 if "frame_idx" not in st.session_state:

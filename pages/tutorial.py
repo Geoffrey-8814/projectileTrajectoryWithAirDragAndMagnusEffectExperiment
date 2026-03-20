@@ -1,6 +1,5 @@
 import streamlit as st
 
-# st.set_page_config(layout="wide", page_title="User Guide")
 
 def local_css(file_name):
     with open(file_name) as f:

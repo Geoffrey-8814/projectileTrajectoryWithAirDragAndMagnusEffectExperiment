@@ -2,7 +2,6 @@ import streamlit as st
 import json
 import pandas as pd
 
-# st.set_page_config(layout="wide", page_title="Project Parameter Generator")
 
 st.title("🛠 Project Parameter Generator")
 st.markdown("""

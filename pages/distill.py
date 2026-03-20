@@ -12,7 +12,6 @@ from sklearn.metrics import r2_score
 # --- IMPORT YOUR CUSTOM MODULES ---
 from ballistics import solve_projectile, extract_apex
 
-# st.set_page_config(layout="wide", page_title="Robot Distiller")
 
 st.title("🤖 Robot Controller Distiller")
 st.markdown("""
