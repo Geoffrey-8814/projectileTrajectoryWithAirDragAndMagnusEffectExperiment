@@ -189,6 +189,11 @@ double vx_vac = dx * (vy_vac - Math.sqrt(disc)) / (2 * {target_dy:.4f});
 
 // 2. Apply Polynomial Correction
 double dvx = 0; double dvy = 0;
+
+double dx2 = dx * dx;
+double dx3 = dx2 * dx;
+double h2 = hmax * hmax;
+double h3 = h2 * hmax;
 double[] features = {{
             1, dx, hmax,
             dx2, dx * hmax, h2,
