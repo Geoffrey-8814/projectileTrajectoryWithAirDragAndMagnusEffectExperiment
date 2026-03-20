@@ -10,7 +10,7 @@ import io
 # Ensure these files are in the same directory as your streamlit app
 from ballistics import solve_projectile_from_polar 
 
-st.set_page_config(layout="wide", page_title="Trajectory Optimizer")
+# st.set_page_config(layout="wide", page_title="Trajectory Optimizer")
 
 st.title("🚀 Projectile Trajectory Optimizer")
 st.markdown("Estimate launch velocity and angle by fitting experimental data to a physics model.")
