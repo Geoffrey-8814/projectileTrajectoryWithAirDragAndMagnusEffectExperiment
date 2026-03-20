@@ -2,9 +2,9 @@ import cv2
 import numpy as np
 import pandas as pd
 # Load the video
-project = "testingShooter"
-name = "3.6"
-index = 1
+project = "fuels"
+name = "15-30"
+index = 3
 
 video_path = f'videos\\{project}\\{name}.mp4'
 cap = cv2.VideoCapture(video_path)
@@ -14,7 +14,7 @@ camera_matrix = results["camera_matrix"]
 
 dist_coeffs = results["dist_coeffs"]
 
-wall_distance = 4.21  # meters
+wall_distance = 6 #4.21  # meters
 
 if not cap.isOpened():
     print("Error opening video file.")

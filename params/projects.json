@@ -1,0 +1,26 @@
+{
+  "projects": {
+    "fuel_2026": {
+      "mass": 0.27,
+      "radius": 0.076,
+      "gravity": 9.8,
+      "air_density": 1.225,
+      "cd": 0.212,
+      "cl": 1.0,
+      "v_delta_ratio": 0.75,
+      "apex_before_target": true,
+      "default_target_dy": 1.2288
+    },
+    "legacy_ball_150mm": {
+      "mass": 0.215,
+      "radius": 0.075,
+      "gravity": 9.81,
+      "air_density": 1.225,
+      "cd": 0.25,
+      "cl": 0.2,
+      "v_delta_ratio": 0.5,
+      "apex_before_target": true,
+      "default_target_dy": 1.2288
+    }
+  }
+}
