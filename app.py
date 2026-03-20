@@ -22,7 +22,7 @@ st.set_page_config(layout="wide", page_title="ProjectiLog")
 # Define the pages pointing to 'views' instead of 'pages'
 pg = st.navigation([
     st.Page("views/tutorial.py", title="User Guide", icon="📖", default=True),
-    st.Page("views/configuration.py", title="Project Configuration", icon="🛠"),
+    st.Page("views/Configuration.py", title="Project Configuration", icon="🛠"),
     st.Page("views/calibration.py", title="Camera Calibration", icon="🏁"),
     st.Page("views/annotator.py", title="Video Annotator", icon="🎯"),
     st.Page("views/optimizer.py", title="Trajectory Optimizer", icon="🚀"),
