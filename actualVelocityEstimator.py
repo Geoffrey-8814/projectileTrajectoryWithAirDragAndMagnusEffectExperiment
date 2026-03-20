@@ -196,9 +196,9 @@ def estimate(path, optimize_aero=False, plot=True):
 # ── Main: run a single trial ───────────────────────────────────────
 if __name__ == '__main__':
     # path = r"dataset\testingShooter\3.6-1-annotations.csv"
-    path = r"dataset\fuels\15-30-1-annotations.csv"
+    path = r"dataset\fuels\10-30-1-annotations.csv"
     
     
     # path = r"dataset\fuels\20-30-2-annotations.csv"
-    res = estimate(path, optimize_aero=False, plot=True)
+    res = estimate(path, optimize_aero=True, plot=True)
     print(res)
