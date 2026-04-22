@@ -16,6 +16,14 @@ if "last_processed_click" not in st.session_state:
     st.session_state.last_processed_click = None
 if "roll_angle" not in st.session_state:
     st.session_state.roll_angle = 0.0
+if "video_path" not in st.session_state:
+    st.session_state.video_path = None
+if "video_name" not in st.session_state:
+    st.session_state.video_name = None
+if "video_fps" not in st.session_state:
+    st.session_state.video_fps = 30.0
+if "video_total_frames" not in st.session_state:
+    st.session_state.video_total_frames = 0
 
 st.title("🎯 Projectile Motion Annotator")
 
@@ -159,17 +167,34 @@ def get_world_coords(u, v, roll_deg=0.0):
                     x_n * np.sin(theta) + y_n * np.cos(theta))
     return float(x_n * wall_dist), float(y_n * wall_dist)
 
-@st.cache_resource
-def get_cap(video_file):
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as tmp:
-        tmp.write(video_file.read())
-        return cv2.VideoCapture(tmp.name)
+
+def read_frame(frame_idx):
+    """Open a fresh VideoCapture, seek, read one frame, then immediately release.
+    Avoids sharing a single cap across users/threads (libavcodec assertion crash)."""
+    path = st.session_state.video_path
+    if not path:
+        return False, None
+    cap = cv2.VideoCapture(path)
+    cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
+    ret, frame = cap.read()
+    cap.release()
+    return ret, frame
 
 # ── 4. MAIN ANNOTATOR ───────────────────────────────────────────────
 if uploaded_video and camera_matrix is not None:
-    cap = get_cap(uploaded_video)
-    fps = cap.get(cv2.CAP_PROP_FPS)
-    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    # Write the video to a per-session temp file only when a new file is uploaded
+    if st.session_state.video_name != uploaded_video.name:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as tmp:
+            tmp.write(uploaded_video.read())
+            st.session_state.video_path = tmp.name
+        st.session_state.video_name = uploaded_video.name
+        cap_meta = cv2.VideoCapture(st.session_state.video_path)
+        st.session_state.video_fps = cap_meta.get(cv2.CAP_PROP_FPS)
+        st.session_state.video_total_frames = int(cap_meta.get(cv2.CAP_PROP_FRAME_COUNT))
+        cap_meta.release()
+
+    fps = st.session_state.video_fps
+    total_frames = st.session_state.video_total_frames
 
     # --- Navigation Controls ---
     c1, c2, c3, c4 = st.columns([4, 1, 1, 2])
@@ -198,8 +223,7 @@ if uploaded_video and camera_matrix is not None:
             st.rerun()
 
     # --- Load and Draw Frame ---
-    cap.set(cv2.CAP_PROP_POS_FRAMES, st.session_state.frame_idx)
-    ret, frame = cap.read()
+    ret, frame = read_frame(st.session_state.frame_idx)
     if ret:
         frame = cv2.resize(frame, (DISPLAY_W, DISPLAY_H))
 

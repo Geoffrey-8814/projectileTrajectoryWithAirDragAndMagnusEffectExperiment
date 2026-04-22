@@ -1,8 +1,3 @@
-import os
-# Disable FFmpeg async frame-threading to prevent libavcodec assertion failures
-# (pthread_frame.c:175) on Linux cloud environments (Streamlit Cloud).
-os.environ["OPENCV_FFMPEG_MULTITHREADED"] = "0"
-
 import streamlit as st
 
 st.set_page_config(
