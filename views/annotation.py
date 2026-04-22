@@ -163,10 +163,7 @@ def get_world_coords(u, v, roll_deg=0.0):
 def get_cap(video_file):
     with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as tmp:
         tmp.write(video_file.read())
-        cap = cv2.VideoCapture(tmp.name)
-        # Disable async threading to prevent libavcodec assertion failure in cloud envs
-        cap.set(cv2.CAP_PROP_THREAD_COUNT, 1)
-        return cap
+        return cv2.VideoCapture(tmp.name)
 
 # ── 4. MAIN ANNOTATOR ───────────────────────────────────────────────
 if uploaded_video and camera_matrix is not None:
