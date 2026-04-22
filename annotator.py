@@ -3,8 +3,8 @@ import numpy as np
 import pandas as pd
 # Load the video
 project = "fuels"
-name = "15-30"
-index = 3
+name = "20-38"
+index = 1
 
 video_path = f'videos\\{project}\\{name}.mp4'
 cap = cv2.VideoCapture(video_path)

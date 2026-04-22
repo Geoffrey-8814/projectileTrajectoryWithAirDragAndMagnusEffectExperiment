@@ -14,6 +14,8 @@ if "annotations" not in st.session_state:
     st.session_state.annotations = {}
 if "last_processed_click" not in st.session_state:
     st.session_state.last_processed_click = None
+if "roll_angle" not in st.session_state:
+    st.session_state.roll_angle = 0.0
 
 st.title("🎯 Projectile Motion Annotator")
 
@@ -24,7 +26,35 @@ with st.sidebar:
     wall_dist = st.number_input("Wall distance (m)", value=6.0, step=0.1)
     
     auto_advance = st.checkbox("Auto-advance frame after click", value=True)
-    
+
+    st.markdown("---")
+    st.subheader("Camera Roll")
+
+    def _on_roll_num():
+        val = round(st.session_state._roll_num, 1)
+        st.session_state.roll_angle = val
+        st.session_state._roll_coarse = int(round(val))
+
+    def _on_roll_coarse():
+        val = float(st.session_state._roll_coarse)
+        st.session_state.roll_angle = val
+        st.session_state._roll_num = val
+
+    st.number_input(
+        "Roll angle (°)",
+        min_value=-45.0, max_value=45.0,
+        value=st.session_state.roll_angle, step=0.1, format="%.1f",
+        key="_roll_num", on_change=_on_roll_num,
+        help="Type or use arrows for 0.1° precision."
+    )
+    st.slider(
+        "Coarse adjust",
+        min_value=-45, max_value=45,
+        value=int(round(st.session_state.roll_angle)),
+        step=1, key="_roll_coarse", on_change=_on_roll_coarse,
+        help="Drag for quick 1° steps."
+    )
+
     st.markdown("---")
     calib_source = st.radio("Calibration", ["Session", "Upload .npz"])
     camera_matrix, dist_coeffs = None, None
@@ -46,11 +76,87 @@ with st.sidebar:
 # ── 3. HELPERS ──────────────────────────────────────────────────────
 
 
-def get_world_coords(u, v):
+def rotate_frame(frame, angle_deg):
+    """Rotate frame counter-clockwise by angle_deg degrees around its centre."""
+    if angle_deg == 0:
+        return frame
+    h, w = frame.shape[:2]
+    M = cv2.getRotationMatrix2D((w / 2.0, h / 2.0), angle_deg, 1.0)
+    return cv2.warpAffine(frame, M, (w, h))
+
+
+def rotate_point(u, v, angle_deg, w, h):
+    """Rotate pixel (u, v) counter-clockwise by angle_deg around frame centre."""
+    if angle_deg == 0:
+        return u, v
+    cx, cy = w / 2.0, h / 2.0
+    theta = np.radians(angle_deg)
+    dx, dy = u - cx, v - cy
+    u_rot = cx + dx * np.cos(theta) - dy * np.sin(theta)
+    v_rot = cy + dx * np.sin(theta) + dy * np.cos(theta)
+    return int(round(u_rot)), int(round(v_rot))
+
+
+def unrotate_point(u_rot, v_rot, angle_deg, w, h):
+    """Inverse of rotate_point: recover original pixel from rotated-display pixel."""
+    return rotate_point(u_rot, v_rot, -angle_deg, w, h)
+
+
+def draw_reference_lines(frame, roll_deg):
+    """Overlay a dashed crosshair and a spirit-level bubble gauge."""
+    h, w = frame.shape[:2]
+    cx, cy = w // 2, h // 2
+    overlay = frame.copy()
+
+    # Dashed horizontal centre line
+    dash, gap = 20, 8
+    x = 0
+    while x < w:
+        cv2.line(overlay, (x, cy), (min(x + dash, w - 1), cy), (0, 220, 220), 1)
+        x += dash + gap
+
+    # Dashed vertical centre line
+    y = 0
+    while y < h:
+        cv2.line(overlay, (cx, y), (cx, min(y + dash, h - 1)), (0, 220, 220), 1)
+        y += dash + gap
+
+    # Spirit-level gauge (bottom centre)
+    bar_y = h - 28
+    bar_half = 90
+    cv2.line(overlay, (cx - bar_half, bar_y), (cx + bar_half, bar_y), (160, 160, 160), 2)
+    # Target tick at centre (0°)
+    cv2.line(overlay, (cx, bar_y - 9), (cx, bar_y + 9), (255, 255, 255), 2)
+    # Bubble position: moves opposite to applied correction
+    pixels_per_deg = bar_half / 15.0   # ±15° fills the bar
+    bx = int(cx - roll_deg * pixels_per_deg)
+    bx = max(cx - bar_half, min(cx + bar_half, bx))
+    if abs(roll_deg) < 0.2:
+        bcol = (0, 255, 0)        # green  – level
+    elif abs(roll_deg) < 3.0:
+        bcol = (0, 165, 255)      # orange – small tilt
+    else:
+        bcol = (0, 0, 255)        # red    – large tilt
+    cv2.circle(overlay, (bx, bar_y), 8, bcol, -1)
+    cv2.circle(overlay, (bx, bar_y), 8, (255, 255, 255), 1)   # white border
+    # Label
+    label = f"{roll_deg:+.1f}°"
+    cv2.putText(overlay, label, (cx + bar_half + 6, bar_y + 5),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+
+    cv2.addWeighted(overlay, 0.6, frame, 0.4, 0, frame)
+    return frame
+
+
+def get_world_coords(u, v, roll_deg=0.0):
     if camera_matrix is None: return 0, 0
     pts = np.array([[[u, v]]], dtype=np.float32)
     undistorted = cv2.undistortPoints(pts, camera_matrix, dist_coeffs, P=None)
     x_n, y_n = undistorted[0, 0]
+    if roll_deg != 0:
+        theta = np.radians(roll_deg)
+        x_n, y_n = (x_n * np.cos(theta) - y_n * np.sin(theta),
+                    x_n * np.sin(theta) + y_n * np.cos(theta))
     return float(x_n * wall_dist), float(y_n * wall_dist)
 
 @st.cache_resource
@@ -96,33 +202,47 @@ if uploaded_video and camera_matrix is not None:
     ret, frame = cap.read()
     if ret:
         frame = cv2.resize(frame, (DISPLAY_W, DISPLAY_H))
-        
-        # Draw all existing annotations
+
+        # Apply camera roll rotation to the display frame
+        display_frame = rotate_frame(frame, st.session_state.roll_angle)
+
+        # Draw reference crosshair + level gauge
+        display_frame = draw_reference_lines(display_frame, st.session_state.roll_angle)
+
+        # Draw all existing annotations (rotate stored original coords to match display)
         for f, data in st.session_state.annotations.items():
             color = (0, 0, 255) if f == st.session_state.frame_idx else (0, 255, 0)
-            cv2.circle(frame, (data["u"], data["v"]), 5, color, -1)
-        
+            du, dv = rotate_point(data["u"], data["v"],
+                                   st.session_state.roll_angle, DISPLAY_W, DISPLAY_H)
+            cv2.circle(display_frame, (du, dv), 5, color, -1)
+
         # UI Overlay
-        cv2.putText(frame, f"Frame: {st.session_state.frame_idx} | Time: {st.session_state.frame_idx/fps:.2f}s", 
+        roll_label = f" | Roll: {st.session_state.roll_angle:+.1f}°" if st.session_state.roll_angle != 0 else ""
+        cv2.putText(display_frame,
+                    f"Frame: {st.session_state.frame_idx} | Time: {st.session_state.frame_idx/fps:.2f}s{roll_label}",
                     (20, 40), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
 
         # --- Coordinate Input ---
-        # The key changes ONLY when the frame_idx changes. 
+        # The key changes ONLY when the frame_idx changes.
         # This fixes the "two-click" bug because the widget resets for the new frame.
-        img_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        img_rgb = cv2.cvtColor(display_frame, cv2.COLOR_BGR2RGB)
         coords = streamlit_image_coordinates(
             Image.fromarray(img_rgb),
-            key=f"canvas_{st.session_state.frame_idx}" 
+            key=f"canvas_{st.session_state.frame_idx}_{st.session_state.roll_angle}"
         )
 
         # --- Click Logic ---
         if coords is not None:
             curr_click = (coords["x"], coords["y"])
-            
+
             # Check if this is a new click (prevents loop)
             if curr_click != st.session_state.last_processed_click:
-                u, v = int(coords["x"]), int(coords["y"])
-                x_world, y_world = get_world_coords(u, v)
+                # Un-rotate click from display space back to original frame space
+                u, v = unrotate_point(
+                    int(coords["x"]), int(coords["y"]),
+                    st.session_state.roll_angle, DISPLAY_W, DISPLAY_H
+                )
+                x_world, y_world = get_world_coords(u, v, roll_deg=st.session_state.roll_angle)
                 
                 # Store data
                 st.session_state.annotations[st.session_state.frame_idx] = {

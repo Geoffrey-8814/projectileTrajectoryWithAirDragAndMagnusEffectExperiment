@@ -83,6 +83,12 @@ def vacuum_velocities(dx, dy, hmax):
     return vx, vy
 
 if __name__ == "__main__":
+    
+#     (vx, vy), cost = solve_for_params(2, 1.88, 2.5)
+    
+#     print(vx, "+", vy)
+    
+# if False:
     # --- 3. GENERATE DATASET (store deltas: actual - vacuum) ---
     dy_const = PROJECT["default_target_dy"]
 
