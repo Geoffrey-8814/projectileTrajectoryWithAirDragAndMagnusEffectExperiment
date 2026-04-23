@@ -58,7 +58,7 @@ all_image_points = []
 image_size = None
 
 # images = load_images_from_folder("imgs/2")
-images = load_images_from_video("imgs/2/calibration.mp4")
+images = load_images_from_video("imgs/15pro/video.mp4")
 
 for frame in images:
     # frame = cv2.rotate(frame, cv2.ROTATE_90_CLOCKWISE)

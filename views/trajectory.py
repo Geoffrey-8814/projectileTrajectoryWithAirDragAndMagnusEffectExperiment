@@ -36,7 +36,7 @@ with st.sidebar:
     st.divider()
     st.header("2. Optimization Settings")
     optimize_aero = st.checkbox("Optimize Aero (Cd & Cl)", value=False)
-    loss_func = st.selectbox("Loss Function", ["linear", "soft_l1", "huber"], index=1)
+    loss_func = st.selectbox("Loss Function", ["linear", "soft_l1", "huber"], index=0)
     
 # ── 2. DATA LOADING & PRE-PROCESSING ────────────────────────────────
 
@@ -62,6 +62,11 @@ def preprocess_data(df):
     y_proc -= y_proc[0]
     t_proc = t - t[0]
 
+    # Auto-detect millisecond timestamps: if total flight > 100, it's almost
+    # certainly not in seconds (a 100-second flight is impossible here).
+    if t_proc[-1] > 100.0:
+        t_proc = t_proc / 1000.0
+
     return t_proc, x_proc, y_proc
 
 # ── 3. CORE PHYSICS & OPTIMIZATION LOGIC ─────────────────────────────
@@ -85,17 +90,24 @@ def simulate_trajectory(v0, theta, Cd, Cl, t_eval, project_params):
     return sol
 
 def run_optimization(t_data, x_data, y_data, project_params, opt_aero):
-    # Initial Guesses (derived from your code)
-    dx = x_data[1] - x_data[0]
-    dy = y_data[1] - y_data[0]
-    dt = t_data[1] - t_data[0]
-    v0_guess = np.hypot(dx, 2 * dy) / dt
-    theta_guess = np.arctan2(2 * dy, abs(dx))
+    # --- Robust initial guess: median of first few inter-frame velocities ---
+    # Using only two adjacent points is very noise-prone; median over N pairs
+    # is far more stable, especially with tracker jitter.
+    n_init = min(4, len(t_data) - 1)
+    vx_ests = [(x_data[i+1] - x_data[i]) / max(t_data[i+1] - t_data[i], 1e-9)
+               for i in range(n_init)]
+    vy_ests = [(y_data[i+1] - y_data[i]) / max(t_data[i+1] - t_data[i], 1e-9)
+               for i in range(n_init)]
+    vx_guess = float(np.median(vx_ests))
+    vy_guess = float(np.median(vy_ests))
+    v0_guess = float(np.hypot(vx_guess, vy_guess))
+    theta_guess = float(np.arctan2(vy_guess, abs(vx_guess)))
+    # Clamp to bounds so least_squares starts inside feasible region
+    v0_guess = np.clip(v0_guess, 1.5, 49.0)
+    theta_guess = np.clip(theta_guess, -np.pi/2 + 0.01, np.pi/2 - 0.01)
 
-    # Weighting: early points get more weight (from your code)
-    t_norm = t_data / t_data[-1]
-    weights = np.exp(-1.0 * t_norm)
-    weights /= weights.mean()
+    # --- Uniform weights (no early-point bias) ---
+    weights = np.ones(len(t_data))
 
     def objective(vars):
         if opt_aero:
@@ -125,8 +137,10 @@ def run_optimization(t_data, x_data, y_data, project_params, opt_aero):
         lower = [1.0,  -np.pi/2]
         upper = [50.0,  np.pi/2]
 
-    res = least_squares(objective, params0, bounds=(lower, upper), loss=loss_func, f_scale=0.1)
-    return res
+    res = least_squares(objective, params0, bounds=(lower, upper),
+                        loss=loss_func, f_scale=0.1,
+                        method='trf', max_nfev=2000)
+    return res, v0_guess, theta_guess
 
 # ── 4. MAIN UI ───────────────────────────────────────────────────────
 
@@ -135,6 +149,11 @@ uploaded_csv = st.file_uploader("Upload Annotations CSV", type=["csv"])
 if uploaded_csv and params:
     df_raw = pd.read_csv(uploaded_csv)
     t_data, x_data, y_data = preprocess_data(df_raw)
+
+    dt_raw = df_raw["timestamp"].iloc[1] - df_raw["timestamp"].iloc[0]
+    ts_unit = "ms (auto-converted to s)" if dt_raw > 0.5 else "s"
+    st.caption(f"📋 {len(t_data)} points · Δt={t_data[1]-t_data[0]:.4f} s · "
+               f"duration={t_data[-1]:.3f} s · timestamp unit detected: {ts_unit}")
     
     col_run, col_info = st.columns([1, 3])
     with col_run:
@@ -142,7 +161,7 @@ if uploaded_csv and params:
     
     if run_btn:
         with st.spinner("Optimizing trajectory..."):
-            result = run_optimization(t_data, x_data, y_data, params, optimize_aero)
+            result, v0_guess, theta_guess = run_optimization(t_data, x_data, y_data, params, optimize_aero)
             
             # Extract Results
             if optimize_aero:
@@ -161,10 +180,16 @@ if uploaded_csv and params:
 
             # --- Plotting ---
             t_fine = np.linspace(0, t_data[-1], 200)
+            sol_guess = simulate_trajectory(v0_guess, theta_guess,
+                                            params["cd"], params["cl"],
+                                            t_fine, params)
             sol = simulate_trajectory(v0_opt, theta_opt, Cd_opt, Cl_opt, t_fine, params)
 
             fig, ax = plt.subplots(figsize=(10, 5))
-            ax.plot(x_data, y_data, 'ro', label='Experimental Data (Normalized)', alpha=0.6)
+            ax.plot(x_data, y_data, 'ro', label='Experimental Data (Normalized)', alpha=0.6, zorder=3)
+            if len(sol_guess.t) > 0:
+                ax.plot(sol_guess.y[0], sol_guess.y[1], color='gray', linestyle='--',
+                        linewidth=1.5, alpha=0.6, label=f'Initial Guess (v₀={v0_guess:.1f} m/s, θ={np.degrees(theta_guess):.1f}°)')
             ax.plot(sol.y[0], sol.y[1], 'b-', linewidth=2, label='Best Fit Model')
             
             ax.set_xlabel('Horizontal Distance (m)')

@@ -94,14 +94,15 @@ def rotate_frame(frame, angle_deg):
 
 
 def rotate_point(u, v, angle_deg, w, h):
-    """Rotate pixel (u, v) counter-clockwise by angle_deg around frame centre."""
+    """Rotate pixel (u, v) counter-clockwise by angle_deg around frame centre.
+    Uses the same Y-down convention as cv2.getRotationMatrix2D."""
     if angle_deg == 0:
         return u, v
     cx, cy = w / 2.0, h / 2.0
     theta = np.radians(angle_deg)
     dx, dy = u - cx, v - cy
-    u_rot = cx + dx * np.cos(theta) - dy * np.sin(theta)
-    v_rot = cy + dx * np.sin(theta) + dy * np.cos(theta)
+    u_rot = cx + dx * np.cos(theta) + dy * np.sin(theta)
+    v_rot = cy - dx * np.sin(theta) + dy * np.cos(theta)
     return int(round(u_rot)), int(round(v_rot))
 
 
@@ -161,22 +162,42 @@ def get_world_coords(u, v, roll_deg=0.0):
     pts = np.array([[[u, v]]], dtype=np.float32)
     undistorted = cv2.undistortPoints(pts, camera_matrix, dist_coeffs, P=None)
     x_n, y_n = undistorted[0, 0]
+    # The camera is physically rolled by roll_deg. undistortPoints returns coords in
+    # the camera's own tilted frame (Y-down). Rotating CCW by roll_deg in Y-down
+    # convention realigns them with world axes (true horizontal/vertical).
     if roll_deg != 0:
         theta = np.radians(roll_deg)
-        x_n, y_n = (x_n * np.cos(theta) - y_n * np.sin(theta),
-                    x_n * np.sin(theta) + y_n * np.cos(theta))
+        x_n, y_n = ( x_n * np.cos(theta) + y_n * np.sin(theta),
+                    -x_n * np.sin(theta) + y_n * np.cos(theta))
     return float(x_n * wall_dist), float(y_n * wall_dist)
 
 
 def read_frame(frame_idx):
     """Open a fresh VideoCapture, seek, read one frame, then immediately release.
-    Avoids sharing a single cap across users/threads (libavcodec assertion crash)."""
+    Avoids sharing a single cap across users/threads (libavcodec assertion crash).
+    Retries with a sequential seek fallback for compressed formats where random
+    seek to a non-keyframe can silently fail."""
     path = st.session_state.video_path
     if not path:
         return False, None
+
     cap = cv2.VideoCapture(path)
+    if not cap.isOpened():
+        return False, None
+
+    # First attempt: direct random seek
     cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
     ret, frame = cap.read()
+
+    # Fallback: sequential read from a slightly earlier position
+    if not ret and frame_idx > 0:
+        start = max(0, frame_idx - 5)
+        cap.set(cv2.CAP_PROP_POS_FRAMES, start)
+        for _ in range(frame_idx - start + 1):
+            ret, frame = cap.read()
+            if not ret:
+                break
+
     cap.release()
     return ret, frame
 
@@ -195,6 +216,25 @@ if uploaded_video and camera_matrix is not None:
 
     fps = st.session_state.video_fps
     total_frames = st.session_state.video_total_frames
+
+    # --- Process any pending canvas click BEFORE rendering (eliminates double-rerun) ---
+    # streamlit_image_coordinates stores its last value in st.session_state[key], so we
+    # can read and act on a click at the TOP of the script, update frame_idx here, and
+    # render the correct frame below — all within the single natural rerun the click
+    # component already triggered. No st.rerun() needed.
+    _ck = f"canvas_{st.session_state.frame_idx}_{st.session_state.roll_angle}"
+    _raw = st.session_state.get(_ck)
+    if _raw is not None and (_raw["x"], _raw["y"]) != st.session_state.last_processed_click:
+        _u, _v = unrotate_point(int(_raw["x"]), int(_raw["y"]),
+                                st.session_state.roll_angle, DISPLAY_W, DISPLAY_H)
+        _xw, _yw = get_world_coords(_u, _v, roll_deg=st.session_state.roll_angle)
+        st.session_state.annotations[st.session_state.frame_idx] = {
+            "timestamp": st.session_state.frame_idx / fps,
+            "u": _u, "v": _v, "x": _xw, "y": _yw
+        }
+        st.session_state.last_processed_click = (_raw["x"], _raw["y"])
+        if auto_advance and st.session_state.frame_idx < total_frames - 1:
+            st.session_state.frame_idx += 1
 
     # --- Navigation Controls ---
     c1, c2, c3, c4 = st.columns([4, 1, 1, 2])
@@ -224,6 +264,9 @@ if uploaded_video and camera_matrix is not None:
 
     # --- Load and Draw Frame ---
     ret, frame = read_frame(st.session_state.frame_idx)
+    if not ret:
+        st.warning(f"⚠️ Could not decode frame {st.session_state.frame_idx}. "
+                   "Try stepping to the previous or next frame.")
     if ret:
         frame = cv2.resize(frame, (DISPLAY_W, DISPLAY_H))
 
@@ -247,39 +290,11 @@ if uploaded_video and camera_matrix is not None:
                     (20, 40), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
 
         # --- Coordinate Input ---
-        # The key changes ONLY when the frame_idx changes.
-        # This fixes the "two-click" bug because the widget resets for the new frame.
         img_rgb = cv2.cvtColor(display_frame, cv2.COLOR_BGR2RGB)
-        coords = streamlit_image_coordinates(
+        streamlit_image_coordinates(
             Image.fromarray(img_rgb),
             key=f"canvas_{st.session_state.frame_idx}_{st.session_state.roll_angle}"
         )
-
-        # --- Click Logic ---
-        if coords is not None:
-            curr_click = (coords["x"], coords["y"])
-
-            # Check if this is a new click (prevents loop)
-            if curr_click != st.session_state.last_processed_click:
-                # Un-rotate click from display space back to original frame space
-                u, v = unrotate_point(
-                    int(coords["x"]), int(coords["y"]),
-                    st.session_state.roll_angle, DISPLAY_W, DISPLAY_H
-                )
-                x_world, y_world = get_world_coords(u, v, roll_deg=st.session_state.roll_angle)
-                
-                # Store data
-                st.session_state.annotations[st.session_state.frame_idx] = {
-                    "timestamp":st.session_state.frame_idx / fps, "u":u, "v":v, "x":x_world, "y":y_world
-                }
-                
-                st.session_state.last_processed_click = curr_click
-                
-                # Logger Pro Style: Move to next frame automatically
-                if auto_advance and st.session_state.frame_idx < total_frames - 1:
-                    st.session_state.frame_idx += 1
-                
-                st.rerun()
 
     # ── 5. DATA TABLE ────────────────────────────────────────────────
     if st.session_state.annotations:
