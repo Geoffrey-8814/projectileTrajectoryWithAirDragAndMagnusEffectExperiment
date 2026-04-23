@@ -31,7 +31,7 @@ def solve_projectile(vx0, vy0, params, t_span, t_eval=None, hit_ground=False, ma
     v_delta_ratio = params["v_delta_ratio"]
 
     v0 = float(np.hypot(vx0, vy0))
-    omega0 = v_delta_ratio * v0 / (2 * radius)
+    omega0 = v_delta_ratio * v0 / (radius)
 
     # Spin decay from aerodynamic friction torque (no extra tuned parameter):
     #   tau = 0.5 * rho * cd * A * (omega*r)^2 * r
